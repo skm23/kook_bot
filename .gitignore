@@ -1,0 +1,5 @@
+.env
+*.md
+.venv/
+text_kook_bot.py
+*.log
