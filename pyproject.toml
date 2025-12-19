@@ -1,0 +1,12 @@
+[project]
+name = "kook-bot"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "aiohttp>=3.13.2",
+    "dotenv>=0.9.9",
+    "khl-py>=0.3.17",
+    "loguru>=0.7.3",
+]

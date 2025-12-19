@@ -1,5 +1,7 @@
 .env
 *.md
-.venv/
-text_kook_bot.py
 *.log
+text_kook_bot.py
+.python-version
+
+.venv/
