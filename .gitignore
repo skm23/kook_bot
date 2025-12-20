@@ -5,3 +5,4 @@ text_kook_bot.py
 .python-version
 
 .venv/
+__pycache__/
