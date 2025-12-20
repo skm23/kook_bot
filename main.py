@@ -24,6 +24,7 @@ from typing import  Dict, List, Set, Optional
 from khl import Bot, Message, EventTypes, Event
 from khl.card import Card, CardMessage, Module, Element, Types
 
+import get_json
 load_dotenv('.env')
 
 """
@@ -42,7 +43,8 @@ ADMIN_USER_IDS = os.getenv('ADMIN_USER_IDS')
 """
 日志配置
 """
-logger.add("kook_bot.log")
+if get_json.log_create == 1:
+    logger.add("kook_bot.log")
 
 """
 猜数字功能
@@ -1843,7 +1845,10 @@ async def on_mention(msg: Message):
 bot通过命令关闭或重启
 """
 #解析管理员ID列表
-ADMIN_USER_ID_LIST = [uid.strip() for uid in ADMIN_USER_IDS.split(',') if uid.strip()]
+if get_json.use_admin_user == 1:
+    ADMIN_USER_ID_LIST = [uid.strip() for uid in ADMIN_USER_IDS.split(',') if uid.strip()]
+else:
+    ADMIN_USER_ID_LIST = [None]
 
 @bot.command(name='stop', prefixes=['/'])
 async def stop_bot(msg: Message):
