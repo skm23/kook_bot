@@ -13,7 +13,6 @@ import time
 import random
 import aiohttp
 import asyncio
-import warnings
 import datetime
 import traceback
 import statistics
@@ -26,11 +25,6 @@ from khl.card import Card, CardMessage, Module, Element, Types
 
 import get_json
 load_dotenv('.env')
-
-"""
-关闭弃用警告
-"""
-warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 """
 bot_token
@@ -1825,21 +1819,19 @@ async def on_mention(msg: Message):
     当用户 @ 机器人时自动回复'收到'
     """
     content = msg.content.strip()
+    try:
+        # 检查消息是否提及了当前机器人
 
-    if content.startswith(('@')):
-        try:
-            # 检查消息是否提及了当前机器人
+        if content == "(met)1026571641(met)":
+            # 创建简单的文本回复
+            await msg.reply("✅ 收到！")
+            logger.info(f"📩 收到来自 {msg.author.username} 的 @ 提及并已回复")
 
-            if bot.me and bot.me.id in msg.mention:
-                # 创建简单的文本回复
-                await msg.reply("✅ 收到！")
-                logger.info(f"📩 收到来自 {msg.author.username} 的 @ 提及并已回复")
-
-        except Exception as e:
-            logger.warning(f"处理 @ 提及事件时出错: {e}")
-            await send_error_message(msg, "处理状态命令时出现错误")
-        except DeprecationWarning:
-            None
+    except Exception as e:
+        logger.warning(f"处理 @ 提及事件时出错: {e}")
+        await send_error_message(msg, "处理状态命令时出现错误")
+    except DeprecationWarning:
+        None
 
 """
 bot通过命令关闭或重启

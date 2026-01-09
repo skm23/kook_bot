@@ -1,6 +1,7 @@
 .env
 *.md
 *.log
+kook_mention_@.py
 text_kook_bot.py
 .python-version
 
