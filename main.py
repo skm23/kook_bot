@@ -23,8 +23,8 @@ from typing import  Dict, List, Set, Optional
 from khl import Bot, Message, EventTypes, Event
 from khl.card import Card, CardMessage, Module, Element, Types
 
-import get_json
-load_dotenv('.env')
+from config1 import get_json
+load_dotenv('config1\.env')
 
 """
 bot_token
@@ -34,14 +34,15 @@ BOT_TOKEN = os.getenv('BOT_TOKEN')
 bot = Bot(token=BOT_TOKEN)
 ADMIN_USER_IDS = os.getenv('ADMIN_USER_IDS')
 
+
 """
 日志配置
 """
 if get_json.log_create == 1:
-    logger.add("kook_bot.log")
+    logger.add("log\kook_bot.log")
 
 """
-猜数字功能
+猜数字
 """
 #游戏状态管理
 class GuessManger:
@@ -492,6 +493,22 @@ async def send_victory_message(msg: Message, game: GameSession, time_taken: floa
     )
 
     await msg.reply(CardMessage(card))
+
+#处理错误消息
+async def send_error_message(msg: Message, error_text: str):
+    card = Card(
+        Module.Section(
+            Element.Text(
+                f"⚠️ **系统错误**\n"
+                f"{error_text}，请稍后重试。",
+                type=Types.Text.KMD
+            )
+        ),
+        theme=Types.Theme.WARNING
+    )
+
+    await  msg.reply(CardMessage(card))
+
 
 """
 分组功能
