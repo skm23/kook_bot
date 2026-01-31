@@ -19,7 +19,7 @@ import statistics
 from loguru import logger
 from threading import Thread
 from dotenv import load_dotenv
-from typing import  Dict, List, Set, Optional
+from typing import  Dict, List, Set
 from khl import Bot, Message, EventTypes, Event
 from khl.card import Card, CardMessage, Module, Element, Types
 
@@ -34,6 +34,8 @@ BOT_TOKEN = os.getenv('BOT_TOKEN')
 bot = Bot(token=BOT_TOKEN)
 ADMIN_USER_IDS = os.getenv('ADMIN_USER_IDS')
 
+from func import guess_manager, GameSession, group_manager, Ch_Tavern, calculator
+
 
 """
 日志配置
@@ -44,110 +46,8 @@ if get_json.log_create == 1:
 """
 猜数字
 """
-#游戏状态管理
-class GuessManger:
-    def __init__(self):
-        self.active_games: Dict[str, 'GameSession'] = {}       # 频道ID -> 游戏会话
-        self.player_stats: Dict[str, dict] = {}               # 玩家ID -> 统计数据
-
-    def start_game(self, channel_id: str, player_id: str, player_name: str):
-        #开始游戏
-        # 结束该频道的现有游戏（如果有）
-        if channel_id in self.active_games:
-            self.end_game(channel_id)
-
-        #创建新游戏
-        target_number = random.randint(1,100)
-        self.active_games[channel_id] = GameSession(
-            target_number = target_number,
-            player_id = player_id,
-            player_name = player_name,
-            start_time = time.time()
-        )
-
-        return self.active_games[channel_id]
-
-    def end_game(self, channel_id: str):
-        #结束游戏
-        if channel_id in self.active_games:
-            del self.active_games[channel_id]
-
-    def get_game(self, channel_id: str) -> Optional['GameSession']:
-        #获取游戏会话
-        return self.active_games.get(channel_id)
-
-    def record_win(self, player_id: str, player_name: str, attempts: int, time_taken: float):
-        #记录玩家胜利
-        if player_id not in self.player_stats:
-            self.player_stats[player_id] = {
-                'name': player_name,
-                'wins': 0,
-                'total_attempts': 0,
-                'total_games': 0,
-                'best_score': float('inf'),
-                'best_time': float('inf')
-            }
-
-        stats = self.player_stats[player_id]
-        stats['wins'] += 1
-        stats['total_attempts'] += attempts
-        stats['total_games'] += 1
-
-        if attempts < stats['best_score']:
-            stats['best_score'] = attempts
-        if time_taken < stats['best_time']:
-            stats['best_time'] = time_taken
-
-    def get_leaderboard(self) -> List[dict]:
-        #获取排行榜
-        return sorted(
-            self.player_stats.values(),
-            key=lambda x: (-x['wins'], x['best_score'], x['best_time'])
-        )[:10]
-
-class GameSession:
-    def __init__(self, target_number: int, player_id: str, player_name: str, start_time: float):
-        self.target_number = target_number
-        self.player_id = player_id
-        self.player_name = player_name
-        self.start_time = start_time
-        self.attempts = 0
-        self.guess_history: List[int] = []
-
-    def make_guess(self, guess: int) -> dict:
-        #进行猜测并返回结果
-        self.attempts += 1
-        self.guess_history.append(guess)
-
-        if guess == self.target_number:
-            return {'status': 'correct', 'message': '🎉 恭喜你猜对了！'}
-        elif guess < self.target_number:
-            return {'status': 'low', 'message': '📈 猜小了，再试试！'}
-        else:
-            return {'status': 'high', 'message': '📉 猜大了，再试试！'}
-
-    def get_hint(self) -> str:
-        #获取提示
-        if len(self.guess_history) < 2:
-            return "还没有足够的猜测来提供提示"
-
-        last_guess = self.guess_history[-1]
-        prev_guess = self.guess_history[-2]
-
-        if abs(last_guess - self.target_number)< abs(prev_guess - self.target_number):
-            return "🔥 更接近了！"
-        else:
-            return "❄️ 更远了！"
-
-    def get_time_taken(self) -> float:
-        #获取游戏耗时
-        return time.time() - self.start_time
-
-#创建全集游戏管理器
-guess_manager = GuessManger()
-
 @bot.command(name='猜', prefixes=['/'])
-async def guess_command(msg: Message, number: str):
+async def guess_command(msg: Message, number: str, *args):
     #猜数字
     try:
         chnnel_id = msg.ctx.channel.id
@@ -236,7 +136,7 @@ async def guess_command(msg: Message, number: str):
         await send_error_message(msg, "处理猜测命令时出现错误")
 
 @bot.command(name='新游戏', prefixes=['/'])
-async def newgame_command(msg: Message):
+async def newgame_command(msg: Message, *args):
     #开始新游戏新命令
     try:
         channel_id = msg.ctx.channel.id
@@ -274,7 +174,7 @@ async def newgame_command(msg: Message):
         await send_error_message(msg, "开始新游戏时出现错误")
 
 @bot.command(name='提示', prefixes=['/'])
-async def hint_command(msg: Message):
+async def hint_command(msg: Message, *args):
     #提示
     try:
         channel_id = msg.ctx.channel.id
@@ -332,7 +232,7 @@ async def hint_command(msg: Message):
         await send_error_message(msg, "获取提示时出现错误")
 
 @bot.command(name='结束', prefixes=['/'])
-async def endgame_command(msg: Message):
+async def endgame_command(msg: Message, *args):
     #结束游戏
     try:
         channel_id = msg.ctx.channel.id
@@ -392,7 +292,7 @@ async def endgame_command(msg: Message):
         await send_error_message(msg, "结束游戏时出现错误")
 
 @bot.command(name='排行榜', prefixes=['/'])
-async def leaderboard_command(msg: Message):
+async def leaderboard_command(msg: Message, *args):
     #排行榜显示
     try:
         leaderboard = guess_manager.get_leaderboard()
@@ -442,7 +342,7 @@ async def leaderboard_command(msg: Message):
         logger.warning(f"处理 /排行榜 命令时出错: {e}")
         await send_error_message(msg, "显示排行榜时出现错误")
 
-async def send_guess_result(msg: Message, result: dict, game: GameSession, is_first_guess: bool):
+async def send_guess_result(msg: Message, result: dict, game: GameSession, is_first_guess: bool, *args):
     #发送猜测结果
     status_emoji = "🎯" if is_first_guess else "🔄"
 
@@ -464,7 +364,7 @@ async def send_guess_result(msg: Message, result: dict, game: GameSession, is_fi
 
     await msg.reply(CardMessage(card))
 
-async def send_victory_message(msg: Message, game: GameSession, time_taken: float):
+async def send_victory_message(msg: Message, game: GameSession, time_taken: float, *args):
     #发送胜利消息
     #表现
     if game.attempts <= 5:
@@ -495,7 +395,7 @@ async def send_victory_message(msg: Message, game: GameSession, time_taken: floa
     await msg.reply(CardMessage(card))
 
 #处理错误消息
-async def send_error_message(msg: Message, error_text: str):
+async def send_error_message(msg: Message, error_text: str, *args):
     card = Card(
         Module.Section(
             Element.Text(
@@ -513,66 +413,8 @@ async def send_error_message(msg: Message, error_text: str):
 """
 分组功能
 """
-class GroupManager:
-    def __init__(self):
-        self.is_collecting = False
-        self.participants: Set[str] = set()    #存储用户id
-        self.user_names: Dict[str, str] = {}   #存储ID到用户名的映射
-
-    def start_collection(self):                #开始统计
-        self.is_collecting = True
-        self.participants.clear()
-        self.user_names.clear()
-
-    def add_participant(self, user_id: str, username: str):    #添加参与者
-        if self.is_collecting:
-            self.participants.add(user_id)
-            self.user_names[user_id] = username
-
-    def stop_collection(self):                 #结束统计
-        self.is_collecting = False
-
-    def get_participant_count(self) -> int:    #获取参与者数量
-        return len(self.participants)
-
-    def get_participant_names(self) -> List[str]:              #获取所有参与者用户名
-        return [self.user_names[uid] for uid in self.participants]
-
-    def generate_groups(self, group_count: int) -> List[List[str]]:     #随机分成指定数量的组
-        if not self.participants:
-            return []
-
-        #随机打乱参与者列表
-        shuffled_users = list(self.participants)
-        random.shuffle(shuffled_users)
-
-        #计算每组大致人数
-        total_users = len(shuffled_users)
-        base_group_size = total_users // group_count
-        remainder = total_users % group_count
-
-        groups: List[List[str]] = []
-        start_index = 0
-
-        #分配用户到各组
-        for i in range(group_count):
-            #前remainder组多一个人
-            group_size = base_group_size + (1 if i < remainder else 0)
-            end_index = start_index + group_size
-
-            #获取该组的用户id并转换为用户名
-            group_user_ids = shuffled_users[start_index: end_index]
-            group_users = [self.user_names[uid] for uid in group_user_ids]
-
-            groups.append(group_users)
-            start_index = end_index
-
-        return groups
-
-group_manager = GroupManager()
-
 @bot.command(name="start", prefixes=['/'])
-async def start_command(msg:Message):
+async def start_command(msg:Message, *args):
     try:
         if group_manager.is_collecting:
             card = Card(
@@ -616,7 +458,7 @@ async def start_command(msg:Message):
         await send_error_message(msg, "处理开始命令时出现错误")
 
 @bot.command(name='j', prefixes=['/'])
-async def join_command(msg: Message):
+async def join_command(msg: Message, *args):
     #报名参加分组命令
     try:
         if not group_manager.is_collecting:
@@ -677,7 +519,7 @@ async def join_command(msg: Message):
         await send_error_message(msg, "处理报名命令时出现错误")
 
 @bot.command(name='end', prefixes=['/'])
-async def end_command(msg: Message, group_count: str):
+async def end_command(msg: Message, group_count: str, *args):
     #结束统计并分组命令
     try:
         if not group_manager.is_collecting:
@@ -778,7 +620,7 @@ async def end_command(msg: Message, group_count: str):
         await send_error_message(msg,"处理结束命令时出现错误")
 
 @bot.command(name="status", prefixes=['/'])
-async def status_command(msg: Message):
+async def status_command(msg: Message, *args):
     #查看当前统计状态
     try:
         if not group_manager.is_collecting:
@@ -828,37 +670,8 @@ games = {}
 #定义扑克牌
 CARDS = ['A', 'K', 'Q'] * 6 + ['JOKER'] * 2
 
-# 用于跟踪俄罗斯轮盘的概率状态
-roulette_state = {}
-
-def create_chamber():
-    #创建新的左轮，只有一个子弹位置
-    chamber = [False] * 6
-    # 固定子弹位置为0
-    chamber[0] = True
-    return chamber
-
-def spin_chamber():
-    #旋转弹仓，随机选一个位
-    return random.randint(0,5)
-
-def get_roulette_probability(channel_id, player_id):
-    key = f"{channel_id}:{player_id}"
-    if key not in roulette_state:
-        #初始化概率
-        roulette_state[key] = 6    #初始概率分母为6
-    return roulette_state[key]
-
-def update_roulette_probability(channel_id, player_id):
-    #更新的概率
-    key = f"{channel_id}:{player_id}"
-    if key in roulette_state:
-        roulette_state[key] = max(1,roulette_state[key] - 1)   #概率增加
-    else:
-        roulette_state[key] = 6
-
 @bot.command(name='创建游戏', prefixes=['/'])
-async def start_game_command(msg: Message):
+async def start_game_command(msg: Message, *args):
     channel_id = msg.ctx.channel.id
     if channel_id in games:
         card = Card(
@@ -899,7 +712,7 @@ async def start_game_command(msg: Message):
     await msg.reply(CardMessage(card))
 
 @bot.command(name='加入游戏', prefixes=['/'])
-async def join_game_command(msg: Message):
+async def join_game_command(msg: Message, *args):
     channel_id = msg.ctx.channel.id
     user_id = msg.author.id
     user_name = msg.author.nickname or msg.author.username
@@ -957,8 +770,8 @@ async def join_game_command(msg: Message):
         'name': user_name,
         'cards': [],
         'alive': True,
-        'bullet_chamber': create_chamber(),          # 左轮手枪弹仓，6个位置
-        'chamber_position': spin_chamber()           # 弹仓当前位置
+        'bullet_chamber': Ch_Tavern.create_chamber(),          # 左轮手枪弹仓，6个位置
+        'chamber_position': Ch_Tavern.spin_chamber()           # 弹仓当前位置
     })
 
     card = Card(
@@ -975,7 +788,7 @@ async def join_game_command(msg: Message):
     await msg.reply(CardMessage(card))
 
 @bot.command(name='开始游戏', prefixes=['/'])
-async def begin_game_command(msg: Message):
+async def begin_game_command(msg: Message, *args):
     channel_id = msg.ctx.channel.id
     if channel_id not in games:
         card = Card(
@@ -1042,8 +855,8 @@ async def begin_game_command(msg: Message):
                 player['cards'].append(game['deck'].pop())
 
         # 装填子弹（每个玩家使用相同的弹仓）
-        player['bullet_chamber'] = create_chamber()
-        player['chamber_position'] = spin_chamber()
+        player['bullet_chamber'] = Ch_Tavern.create_chamber()
+        player['chamber_position'] = Ch_Tavern.spin_chamber()
 
     # 通过私信发送手牌给每个玩家
     for player in game['players']:
@@ -1296,7 +1109,7 @@ async def handle_private_play(msg: Message):
         await send_game_status(msg)
 
 # 发送游戏状态信息到私信
-async def send_game_status(msg: Message):
+async def send_game_status(msg: Message, *args):
     user_id = msg.author.id
 
     # 查找该用户参与的游戏
@@ -1357,7 +1170,7 @@ async def send_game_status(msg: Message):
 
 
 # 处理游戏结束
-async def handle_game_end(channel_id, msg, alive_players):
+async def handle_game_end(channel_id, msg, alive_players, *args):
     if alive_players:
         winner = alive_players[0]
         card_win = Card(
@@ -1393,13 +1206,13 @@ async def handle_game_end(channel_id, msg, alive_players):
     del games[channel_id]
 
     # 清除该频道的俄罗斯轮盘状态
-    keys_to_remove = [key for key in roulette_state.keys() if key.startswith(f"{channel_id}:")]
+    keys_to_remove = [key for key in Ch_Tavern.roulette_state.keys() if key.startswith(f"{channel_id}:")]
     for key in keys_to_remove:
-        del roulette_state[key]
+        del Ch_Tavern.roulette_state[key]
 
 
 # 发送游戏结果通知到私信
-async def send_game_result_notifications(channel_id, winner=None):
+async def send_game_result_notifications(channel_id, winner=None, *args):
     if channel_id not in games:
         return
 
@@ -1430,7 +1243,7 @@ async def send_game_result_notifications(channel_id, winner=None):
 
 
 @bot.command(name='质疑', prefixes=['/'])
-async def challenge(msg: Message):
+async def challenge(msg: Message, *args):
     channel_id = msg.ctx.channel.id
     user_id = msg.author.id
 
@@ -1501,17 +1314,13 @@ async def challenge(msg: Message):
     last_declared_card = game['last_declared_card']
     target_card = game['target_card']
 
-    # 计算实际打出的目标牌数量（包括JOKER）
-    actual_target_cards = game['discard_pile'].count(target_card) + \
-                          game['discard_pile'].count('JOKER')
-
     # 重置弃牌堆
     game['discard_pile'] = []
     game['last_declared_card'] = None
     game['last_player'] = None
 
     # 判断是否说谎：如果声明的牌不是目标牌且实际没有打出目标牌，则说谎
-    is_lying = (last_declared_card != target_card) and (actual_target_cards == 0)
+    is_lying = (last_declared_card != target_card) and (last_declared_card != 'JOKER')
 
     # 确定进行俄罗斯轮盘的玩家
     if is_lying:  # 上家说谎
@@ -1526,7 +1335,7 @@ async def challenge(msg: Message):
     position = roulette_player['chamber_position']
 
     # 获取当前概率分母
-    probability_denominator = get_roulette_probability(channel_id, roulette_player['id'])
+    probability_denominator = Ch_Tavern.get_roulette_probability(channel_id, roulette_player['id'])
 
     # 计算被淘汰的概率
     eliminated_probability = 1.0 / probability_denominator
@@ -1546,7 +1355,7 @@ async def challenge(msg: Message):
             return
     else:
         # 幸存，更新概率状态
-        update_roulette_probability(channel_id, roulette_player['id'])
+        Ch_Tavern.update_roulette_probability(channel_id, roulette_player['id'])
         result_msg += f'Click! {roulette_player["name"]}幸存下来！'
         color = Types.Theme.SUCCESS
 
@@ -1567,7 +1376,7 @@ async def challenge(msg: Message):
 
 
 #重新发牌
-async def deal_cards(msg: Message, game):
+async def deal_cards(msg: Message, game, *args):
     """重新发牌"""
     # 重置牌堆
     game['deck'] = CARDS.copy()
@@ -1584,8 +1393,8 @@ async def deal_cards(msg: Message, game):
                 player['cards'].append(game['deck'].pop())
 
         # 重新装填子弹（每个玩家使用相同的弹仓）
-        player['bullet_chamber'] = create_chamber()
-        player['chamber_position'] = spin_chamber()
+        player['bullet_chamber'] = Ch_Tavern.create_chamber()
+        player['chamber_position'] = Ch_Tavern.spin_chamber()
 
     # 通过私信发送新牌给每个玩家
     for player in alive_players:
@@ -1644,6 +1453,30 @@ async def deal_cards(msg: Message, game):
 
     await msg.reply(CardMessage(card))
 
+"""
+哈希值计算
+"""
+@bot.command(name='hash', prefixes=['/'])
+async def hash_command(msg: Message, *args):
+    "处理 /hash 命令"
+    try:
+        command = msg.content
+        result = calculator.process_command(command)
+        card = Card(
+            Module.Header("哈希计算结果"),
+            Module.Section(
+                Element.Text(
+                    f"{result}",
+                    type=Types.Text.KMD
+                )
+            ),
+            theme=Types.Theme.SUCCESS
+        )
+        await msg.reply(CardMessage(card))
+    except Exception as e:
+        logger.warning(f"处理 /hash 命令时出错: {e}")
+        await send_error_message(msg, "/hash 命令出错")
+
 
 """
 测试网络延迟和bot响应时间
@@ -1685,7 +1518,7 @@ async def measure_ping():
         return 9999, 0, len(latencies)
 
 @bot.command(name='ping', prefixes=['/'])
-async def ping_command(msg: Message):
+async def ping_command(msg: Message, *args):
     #ping命令
     user_id = msg.author.id
     current_time = time.time()
@@ -1803,7 +1636,7 @@ async def ping_command(msg: Message):
 查看当前时间
 """
 @bot.command(name='time', prefixes=['/'])
-async def time_command(msg: Message):
+async def time_command(msg: Message, *args):
     #time命令
     try:
         current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -1943,6 +1776,45 @@ async def welcome_new_member(bot, event: Event):
 """
 帮助命令
 """
+@bot.command(name='hashhelp', prefixes=['/'])
+async def hashhelp(msg: Message):
+    card = Card(
+        Module.Header("🔐 哈希计算帮助"),
+        Module.Section(
+            Element.Text(
+                f"命令格式:\n"
+                f"""/hash value1 [value2] [ALG alg_name] [OUT format] \n[HMAC key] [SEP sep] [COD encoding]\n\n"""
+
+                f"参数说明:\n"
+                f"- value: 要加密的数据（必需，可多个）\n"
+                f"- ALG: 哈希算法（可选，默认 md5）\n"
+                f"支持: md5, sha1, sha224, sha256, sha384, sha512, sha3_224, sha3_256, sha3_384, sha3_512\n"
+                f"- OUT: 输出格式（可选，默认 HEX + 大写）\n"
+                f"HEX - 十六进制\n"
+                f"BASE64 - Base64 编码\n"
+                f"LOWER - 十六进制小写\n"
+                f"UPPER - 十六进制大写\n"
+                f"- HMAC: 安全密钥（可选，无则不使用 HMAC）\n"
+                f"若提供空值则默认为 secret\n"
+                f"- SEP: 分隔符（可选，多个结果时使用）\n"
+                f"若提供空值则不使用分隔符\n"
+                f"- COD: 编码方式（可选，默认 utf-8）\n"
+                f"支持: utf-8, hex, base64 等\n\n"
+
+                f"使用示例:\n"
+                f"/hash hello\n"
+                f"/hash hello ALG sha256\n"
+                f"/hash hello world ALG sha256 OUT base64\n"
+                f"/hash secret HMAC mykey\n"
+                f"/hash hello ALG sha256 OUT lower HMAC mypassword SEP | COD utf-8\n",
+                type=Types.Text.KMD
+            )
+        ),
+        theme=Types.Theme.INFO
+    )
+
+    await msg.reply(CardMessage(card))
+
 @bot.command(name="分组", prefixes=['/'])
 async def help_command(msg: Message):
     #分组帮助命令
@@ -2052,6 +1924,7 @@ async def allhelp_command(msg: Message):
                 "** 可用命令:**\n"
                 "• `/分组` - 查看分组相关命令\n"
                 "• `/猜数字` - 查看猜数字相关命令\n"
+                "• `/hashhelp` - 查看哈希值计算相关命令\n"
                 "• `/骗子酒馆` - 查看骗子酒馆相关命令\n"
                 "• `/ping` - 网络连接测试与bot响应时间\n"
                 "• `/time` - 查看当前时间\n",
